@@ -649,25 +649,42 @@ async function CreativeCreate(IDLIST, Datas, Row) {
     await RPA.sleep(4000);
   }
   // 属性が何個あるのか判定して個数によって処理を変える
-  const ZokuseiFlag = ['0'];
-  try {
-    RPA.Logger.info(Datas[0][7].length);
-    ZokuseiFlag[0] = '1';
-  } catch {
-    RPA.Logger.info(`属性の数 ${ZokuseiFlag[0]}`);
+  let ZokuseiFlag = 0;
+  if (Datas[0][7] != '') {
+    ZokuseiFlag = 1;
   }
-  try {
-    RPA.Logger.info(Datas[0][8].length);
-    ZokuseiFlag[0] = '2';
-  } catch {
-    RPA.Logger.info(`属性の数 ${ZokuseiFlag[0]}`);
+  if (Datas[0][8] != '') {
+    ZokuseiFlag = 2;
   }
-  try {
-    RPA.Logger.info(Datas[0][9].length);
-    ZokuseiFlag[0] = '3';
-  } catch {
-    RPA.Logger.info(`属性の数 ${ZokuseiFlag[0]}`);
+  if (Datas[0][9] != '') {
+    ZokuseiFlag = 3;
   }
+  RPA.Logger.info(`属性の数: ${ZokuseiFlag}`);
+  if (ZokuseiFlag == 0) {
+    RPA.Logger.info('属性 0 なのでスキップします');
+    const CreativeOKButto = await RPA.WebBrowser.findElementByXPath(
+      '/html/body/div/div/div[5]/div[2]/footer/div[2]'
+    );
+    await RPA.WebBrowser.mouseClick(CreativeOKButto);
+    await RPA.sleep(5000);
+  }
+  if (ZokuseiFlag == 1) {
+    await ZokuseiInput_function(Datas[0][7], true);
+  }
+  if (ZokuseiFlag == 2) {
+    await ZokuseiInput_function(Datas[0][7], false);
+    await ZokuseiInput_function(Datas[0][8], true);
+  }
+  if (ZokuseiFlag == 3) {
+    await ZokuseiInput_function(Datas[0][7], false);
+    await ZokuseiInput_function(Datas[0][8], false);
+    await ZokuseiInput_function(Datas[0][9], true);
+  }
+}
+
+// 属性を入力する関数
+async function ZokuseiInput_function(Data, OKbutton) {
+  RPA.Logger.info(`属性 :${Data} 設定します`);
   const CreativeOKButto = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[5]/div[2]/footer/div[2]'
   );
@@ -683,145 +700,53 @@ async function CreativeCreate(IDLIST, Datas, Row) {
   const ZokuseiNewCreateButton = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[2]/div/div[1]'
   );
-  if (ZokuseiFlag[0] == '0') {
-    RPA.Logger.info('属性 0 なのでスキップします');
-    await RPA.WebBrowser.mouseClick(CreativeOKButto);
-    await RPA.sleep(5000);
+  await RPA.sleep(100);
+  /*
+  try {
+    await RPA.WebBrowser.mouseClick(ZokuseiList);
+  } catch {
+    await RPA.WebBrowser.mouseClick(ZokuseiList2);
   }
-  if (ZokuseiFlag[0] == '1') {
-    RPA.Logger.info('属性 1 設定します');
-    await RPA.sleep(100);
-    /*
-    try{
-      await RPA.WebBrowser.mouseClick(ZokuseiList);
+  */
+  await RPA.WebBrowser.sendKeys(ZokuseiInput, [Data]);
+  await RPA.sleep(300);
+  try {
+    const list1 = await RPA.WebBrowser.findElementByClassName(
+      'Select-menu-outer'
+    );
+    const listtext1 = await list1.getText();
+    // 属性がすでに登録されている場合はそのままOKボタンをおす
+    if (listtext1 != 'No results found') {
+      RPA.Logger.info('属性既存の物を使用します');
+      await RPA.WebBrowser.sendKeys(ZokuseiInput, [Key.ENTER]);
+      await RPA.sleep(200);
+      if (OKbutton == true) {
+        await RPA.WebBrowser.mouseClick(CreativeOKButto);
+        await RPA.sleep(5000);
+      }
+      return;
     }
-    catch{
-      await RPA.WebBrowser.mouseClick(ZokuseiList2);
-    }
-    */
-    await RPA.WebBrowser.sendKeys(ZokuseiInput, [Datas[0][7]]);
-    await RPA.sleep(300);
-    try {
-      const list1 = await RPA.WebBrowser.findElementByClassName(
-        'Select-menu-outer'
+    // 入力した属性がない場合は、新規作成する
+    if (listtext1 == 'No results found') {
+      await RPA.WebBrowser.mouseClick(ZokuseiNewCreateButton);
+      RPA.Logger.info('属性新規作成します');
+      await RPA.sleep(2000);
+      const ZokuseiNewInput = await RPA.WebBrowser.findElementByXPath(
+        '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div/input'
       );
-      const listtext1 = await list1.getText();
-      RPA.Logger.info('属性 → ' + listtext1);
-      // 属性がすでに登録されている場合はそのままOKボタンをおす
-      if (listtext1 != 'No results found') {
-        RPA.Logger.info('属性既存の物を使用します');
-        await RPA.WebBrowser.sendKeys(ZokuseiInput, [Key.ENTER]);
-        await RPA.sleep(200);
-        await RPA.WebBrowser.mouseClick(CreativeOKButto);
-        await RPA.sleep(5000);
-        return;
-      }
-      // 入力した属性がない場合は、新規作成する
-      if (listtext1 == 'No results found') {
-        RPA.Logger.info('属性新規作成します');
-        await RPA.sleep(2000);
-        const ZokuseiNewInput = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div/input'
-        );
-        await RPA.WebBrowser.sendKeys(ZokuseiNewInput, [Datas[0][7]]);
-        const ZokuseiNewOKButton = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/footer/div[2]'
-        );
-        await RPA.WebBrowser.mouseClick(ZokuseiNewOKButton);
-        await RPA.sleep(4000);
-        await RPA.WebBrowser.mouseClick(CreativeOKButto);
-        await RPA.sleep(5000);
-        return;
-      }
-    } catch {}
-  }
-  if (ZokuseiFlag[0] == '2') {
-    RPA.Logger.info('属性 2 設定します');
-    await RPA.sleep(100);
-    try {
-      await RPA.WebBrowser.mouseClick(ZokuseiList);
-    } catch {
-      await RPA.WebBrowser.mouseClick(ZokuseiList2);
-    }
-    await RPA.WebBrowser.sendKeys(ZokuseiInput, [Datas[0][7]]);
-    await RPA.sleep(300);
-    try {
-      const list1 = await RPA.WebBrowser.findElementByClassName(
-        'Select-menu-outer'
+      await RPA.WebBrowser.sendKeys(ZokuseiNewInput, [Data]);
+      const ZokuseiNewOKButton = await RPA.WebBrowser.findElementByXPath(
+        '/html/body/div/div/div[5]/div[2]/footer/div[2]'
       );
-      const listtext1 = await list1.getText();
-      RPA.Logger.info('属性 → ' + listtext1);
-      // 属性がすでに登録されている場合はそのままOKボタンをおす
-      if (listtext1 != 'No results found') {
-        RPA.Logger.info('属性既存の物を使用します');
-        await RPA.WebBrowser.sendKeys(ZokuseiInput, [Key.ENTER]);
-        await RPA.sleep(200);
+      await RPA.WebBrowser.mouseClick(ZokuseiNewOKButton);
+      await RPA.sleep(4000);
+      if (OKbutton == true) {
         await RPA.WebBrowser.mouseClick(CreativeOKButto);
         await RPA.sleep(5000);
       }
-      // 入力した属性がない場合は、新規作成する
-      if (listtext1 == 'No results found') {
-        await RPA.WebBrowser.mouseClick(ZokuseiNewCreateButton);
-        RPA.Logger.info('属性新規作成します');
-        await RPA.sleep(2000);
-        const ZokuseiNewInput = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div/input'
-        );
-        await RPA.WebBrowser.sendKeys(ZokuseiNewInput, [Datas[0][7]]);
-        const ZokuseiNewOKButton = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/footer/div[2]'
-        );
-        await RPA.WebBrowser.mouseClick(ZokuseiNewOKButton);
-        await RPA.sleep(4000);
-        await RPA.WebBrowser.mouseClick(CreativeOKButto);
-        await RPA.sleep(5000);
-      }
-    } catch {}
-    /*
-    try{
-      await RPA.WebBrowser.mouseClick(ZokuseiList);
+      return;
     }
-    catch{
-      await RPA.WebBrowser.mouseClick(ZokuseiList2);
-    }
-    */
-    await RPA.WebBrowser.sendKeys(ZokuseiInput, [Datas[0][8]]);
-    await RPA.sleep(300);
-    try {
-      const list1 = await RPA.WebBrowser.findElementByClassName(
-        'Select-menu-outer'
-      );
-      const listtext1 = await list1.getText();
-      RPA.Logger.info('属性 → ' + listtext1);
-      // 属性がすでに登録されている場合はそのままOKボタンをおす
-      if (listtext1 != 'No results found') {
-        RPA.Logger.info('属性既存の物を使用します');
-        await RPA.WebBrowser.sendKeys(ZokuseiInput, [Key.ENTER]);
-        await RPA.sleep(200);
-        await RPA.WebBrowser.mouseClick(CreativeOKButto);
-        await RPA.sleep(5000);
-        return;
-      }
-      // 入力した属性がない場合は、新規作成する
-      if (listtext1 == 'No results found') {
-        await RPA.WebBrowser.mouseClick(ZokuseiNewCreateButton);
-        RPA.Logger.info('属性新規作成します');
-        await RPA.sleep(2000);
-        const ZokuseiNewInput = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div/input'
-        );
-        await RPA.WebBrowser.sendKeys(ZokuseiNewInput, [Datas[0][8]]);
-        const ZokuseiNewOKButton = await RPA.WebBrowser.findElementByXPath(
-          '/html/body/div/div/div[5]/div[2]/footer/div[2]'
-        );
-        await RPA.WebBrowser.mouseClick(ZokuseiNewOKButton);
-        await RPA.sleep(4000);
-        await RPA.WebBrowser.mouseClick(CreativeOKButto);
-        await RPA.sleep(5000);
-        return;
-      }
-    } catch {}
-  }
+  } catch {}
 }
 
 // クリエイティブIDを取得して　ID円滑シートに貼り付ける関数
