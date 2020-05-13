@@ -1,5 +1,11 @@
 import RPA from 'ts-rpa';
-import { WebDriver, By, FileDetector, Key } from 'selenium-webdriver';
+import {
+  WebDriver,
+  By,
+  FileDetector,
+  Key,
+  WebElement,
+} from 'selenium-webdriver';
 import { rootCertificates } from 'tls';
 
 var fs = require('fs');
@@ -250,7 +256,7 @@ async function DataRowGet(WorkData, Row) {
   // ID円滑シート から作業する行のデータを抽出する
   WorkData[0] = await RPA.Google.Spreadsheet.getValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!A${Row[0]}:J${Row[0]}`,
+    range: `${SSName1}!A${Row[0]}:M${Row[0]}`,
   });
   // ID円滑シート　のM列に作業中と記入する
   await RPA.Google.Spreadsheet.setValues({
@@ -694,8 +700,13 @@ async function ZokuseiInput_function(Data, OKbutton) {
   const ZokuseiList2 = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div[1]/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[1]/div/div/div/div/span[1]/div[1]'
   );
+  /*
   const ZokuseiInput = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[1]/div/div/div/div/span[1]/div[2]/input'
+  );
+  */
+  const ZokuseiInput: WebElement = await RPA.WebBrowser.driver.executeScript(
+    `return document.getElementsByClassName('Select-input')[8].children[0]`
   );
   const ZokuseiNewCreateButton = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[2]/div/div[1]'
