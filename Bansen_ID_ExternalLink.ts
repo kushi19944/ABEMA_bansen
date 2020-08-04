@@ -244,7 +244,7 @@ async function AAAMS_2nd_Login(AccountFlag) {
 async function DataRowGet(WorkData, Row) {
   const firstrow = await RPA.Google.Spreadsheet.getValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!M3:M¥K2000`,
+    range: `${SSName1}!K3:K2000`,
   });
   for (let i in firstrow) {
     if (firstrow[i][0].indexOf('初期') == 0) {
