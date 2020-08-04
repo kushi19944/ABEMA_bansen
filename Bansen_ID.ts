@@ -11,8 +11,8 @@ import { rootCertificates } from 'tls';
 var fs = require('fs');
 
 // 読み込みする スプレッドシートID と シート名 の記載
-const SSID = process.env.SheetID;
-const SSName1 = process.env.SheetName_1;
+const SSID = process.env.BANSEN_SheetID;
+const SSName1 = process.env.BANSEN_SheetName;
 // 画像などを保存するフォルダのパスを記載する。
 const DownloadFolder = __dirname + '/Download/';
 // Abematvのログイン。 メールアドレス・パスワードの記載 <<漏洩注意>>
@@ -94,7 +94,7 @@ async function Start() {
   while (0 == 0) {
     const AllData = await RPA.Google.Spreadsheet.getValues({
       spreadsheetId: `${SSID}`,
-      range: `${SSName1}!A3:M3000`,
+      range: `${SSName1}!A3:K3000`,
     });
     for (let i in AllData) {
       RPA.Logger.info(AllData[i]);
@@ -102,7 +102,7 @@ async function Start() {
         MainLoopFlag[0] = true;
         break;
       }
-      if (AllData[i][12] == '初期') {
+      if (AllData[i][10] == '初期') {
         if (AllData[i]) await WorkStart();
       }
     }
@@ -235,11 +235,11 @@ async function AAAMS_2nd_Login() {
 async function DataRowGet(WorkData, Row) {
   const firstrow = await RPA.Google.Spreadsheet.getValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!M1:M2000`,
+    range: `${SSName1}!K3:K2000`,
   });
   for (let i in firstrow) {
     if (firstrow[i][0].indexOf('初期') == 0) {
-      Row[0] = Number(i) + 1;
+      Row[0] = Number(i) + 3;
       break;
     }
   }
@@ -247,12 +247,12 @@ async function DataRowGet(WorkData, Row) {
   // ID円滑シート から作業する行のデータを抽出する
   WorkData[0] = await RPA.Google.Spreadsheet.getValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!A${Row[0]}:M${Row[0]}`,
+    range: `${SSName1}!A${Row[0]}:K${Row[0]}`,
   });
-  // ID円滑シート　のM列に作業中と記入する
+  // ID円滑シート　のK列に作業中と記入する
   await RPA.Google.Spreadsheet.setValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!M${Row[0]}:M${Row[0]}`,
+    range: `${SSName1}!K${Row[0]}:K${Row[0]}`,
     values: [['作業中']],
   });
   RPA.Logger.info(`${Row[0]}　行目のステータスを 作業中 に変更しました`);
@@ -379,7 +379,7 @@ async function AssetsCreate(IDLIST, Datas, Row) {
     const ErrorText = [['エラー', 'アセット名65文字以上']];
     await RPA.Google.Spreadsheet.setValues({
       spreadsheetId: `${SSID}`,
-      range: `${SSName1}!M${Row[0]}:N${Row[0]}`,
+      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
       values: ErrorText,
     });
     RPA.Logger.info(`${Row[0]} 行目のステータスをエラーに変更しました`);
@@ -463,7 +463,7 @@ async function AssetsCreate(IDLIST, Datas, Row) {
     ];
     await RPA.Google.Spreadsheet.setValues({
       spreadsheetId: `${SSID}`,
-      range: `${SSName1}!M${Row[0]}:N${Row[0]}`,
+      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
       values: ErrorText,
     });
     await Start();
@@ -497,7 +497,7 @@ async function AssetsCreate(IDLIST, Datas, Row) {
       const ErrorText = [['エラー', '同じアセット名が存在しています']];
       await RPA.Google.Spreadsheet.setValues({
         spreadsheetId: `${SSID}`,
-        range: `${SSName1}!M${Row[0]}:N${Row[0]}`,
+        range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
         values: ErrorText,
       });
       Start();
@@ -647,36 +647,30 @@ async function CreativeCreate(IDLIST, Datas, Row) {
     await RPA.sleep(4000);
   }
   // 属性が何個あるのか判定して個数によって処理を変える
-  let ZokuseiFlag = 0;
-  if (Datas[0][7] != '') {
-    ZokuseiFlag = 1;
+  const ZokuseiSplitData = await Datas[0][7].split(',');
+  if (ZokuseiSplitData.length == 1 && ZokuseiSplitData[0] != '') {
+    RPA.Logger.info(`属性の数:1`);
+    await ZokuseiInput_function(ZokuseiSplitData[0], true);
   }
-  if (Datas[0][8] != '') {
-    ZokuseiFlag = 2;
+  if (ZokuseiSplitData.length == 2) {
+    RPA.Logger.info(`属性の数:2`);
+    await ZokuseiInput_function(ZokuseiSplitData[0], false);
+    await ZokuseiInput_function(ZokuseiSplitData[1], true);
   }
-  if (Datas[0][9] != '') {
-    ZokuseiFlag = 3;
+  if (ZokuseiSplitData.length == 3) {
+    RPA.Logger.info(`属性の数:3`);
+    await ZokuseiInput_function(ZokuseiSplitData[0], false);
+    await ZokuseiInput_function(ZokuseiSplitData[1], false);
+    await ZokuseiInput_function(ZokuseiSplitData[2], true);
   }
-  RPA.Logger.info(`属性の数: ${ZokuseiFlag}`);
-  if (ZokuseiFlag == 0) {
+  // 属性無しの場合は、すぐ登録する
+  if (ZokuseiSplitData.length == 1 && ZokuseiSplitData[0] == '') {
     RPA.Logger.info('属性 0 なのでスキップします');
     const CreativeOKButto = await RPA.WebBrowser.findElementByXPath(
       '/html/body/div/div/div[5]/div[2]/footer/div[2]'
     );
     await RPA.WebBrowser.mouseClick(CreativeOKButto);
     await RPA.sleep(5000);
-  }
-  if (ZokuseiFlag == 1) {
-    await ZokuseiInput_function(Datas[0][7], true);
-  }
-  if (ZokuseiFlag == 2) {
-    await ZokuseiInput_function(Datas[0][7], false);
-    await ZokuseiInput_function(Datas[0][8], true);
-  }
-  if (ZokuseiFlag == 3) {
-    await ZokuseiInput_function(Datas[0][7], false);
-    await ZokuseiInput_function(Datas[0][8], false);
-    await ZokuseiInput_function(Datas[0][9], true);
   }
 }
 
@@ -777,13 +771,13 @@ async function CreativeIDGet(IDLIST, WorkData, Row) {
   // ID円滑シートに　クリエイティブIDを貼り付ける
   await RPA.Google.Spreadsheet.setValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
+    range: `${SSName1}!I${Row[0]}:J${Row[0]}`,
     values: IDLIST,
   });
   // 作業終了を記載する
   await RPA.Google.Spreadsheet.setValues({
     spreadsheetId: `${SSID}`,
-    range: `${SSName1}!M${Row[0]}:M${Row[0]}`,
+    range: `${SSName1}!K${Row[0]}:K${Row[0]}`,
     values: [['完了']],
   });
 }
