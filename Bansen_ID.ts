@@ -534,7 +534,8 @@ async function AssetsCreate(IDLIST, Datas, Row) {
     try {
       const firstAssetsName = await RPA.WebBrowser.wait(
         RPA.WebBrowser.Until.elementLocated({
-          xpath: '/html/body/div/div/div[6]/div[2]/div[1]/table/tbody/tr/td[2]',
+          xpath:
+            '//*[@id="reactroot"]/div/div[6]/div[2]/div[1]/table/tbody/tr/td[2]',
         }),
         5000
       );
@@ -547,8 +548,9 @@ async function AssetsCreate(IDLIST, Datas, Row) {
         RPA.Logger.info('アセット名一致しました。　アセットID取得します');
         break;
       }
-    } catch {
+    } catch (ErrorMes) {
       RPA.Logger.info('アセット名が取得できませんでした');
+      RPA.Logger.info('エラー原因:', ErrorMes);
     }
   }
   while (0 == 0) {
