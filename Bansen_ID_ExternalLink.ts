@@ -7,6 +7,7 @@ import {
   WebElement,
 } from 'selenium-webdriver';
 import { rootCertificates } from 'tls';
+import { Router } from 'express';
 
 var fs = require('fs');
 
@@ -73,8 +74,12 @@ async function WorkStart() {
   await AssetsCreate(IDLIST, WorkData[0], Row);
   // クリエイティブ作成を行う
   await CreativeCreate(IDLIST, WorkData[0], Row);
-  // クリエイティブIDを取得して　ID円滑シートに貼り付ける関数
+  // クリエイティブIDを取得する
   await CreativeIDGet(IDLIST, WorkData[0], Row);
+  // アセットIDを取得する
+  await Get_AssetID_function(IDLIST, WorkData[0], Row);
+  // スプシにアセット・クリエイティブIDを貼り付ける
+  await Spreadsheet_setValues_function(IDLIST, WorkData[0], Row);
   RPA.Logger.info(IDLIST);
   await RPA.sleep(1500);
 }
@@ -535,7 +540,8 @@ async function AssetsCreate(IDLIST, Datas, Row) {
     }
     RPA.Logger.info('プレビュー画面が取得できません');
   }
-  await RPA.sleep(500);
+  await RPA.sleep(1000);
+  /*
   // アセット名が一致しているか判定
   while (0 == 0) {
     await RPA.sleep(4000);
@@ -572,6 +578,7 @@ async function AssetsCreate(IDLIST, Datas, Row) {
       break;
     }
   }
+  */
   // アセットID　を取得した後、右上のクローズボタンをおす
   const CloseButton = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[6]/div[2]/div[3]'
@@ -778,6 +785,31 @@ async function CreativeIDGet(IDLIST, WorkData, Row) {
       break;
     }
   }
+}
+
+// アセットIDを取得する関数
+async function Get_AssetID_function(IDLIST, Datas, Row) {
+  // アセット一覧ページに遷移
+  await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL);
+  await RPA.sleep(2000);
+  // アセットのデータ一覧取得
+  const AssetList = await RPA.WebBrowser.findElementsByClassName(
+    `Table__line___voLKf`
+  );
+  for (let i in AssetList) {
+    const AssetText = await AssetList[i].getText();
+    const AssetData = AssetText.split('\n'); // 改行で切り分ける
+    RPA.Logger.info(AssetData);
+    if (AssetData[2] == Datas[0][3]) {
+      RPA.Logger.info('アセット名一致しました.アセットID取得します');
+      RPA.Logger.info('アセットID:', AssetData[0]);
+      IDLIST[0][0] = AssetData[0];
+      break;
+    }
+  }
+}
+
+async function Spreadsheet_setValues_function(IDLIST, WorkData, Row) {
   // ID円滑シートに　クリエイティブIDを貼り付ける
   await RPA.Google.Spreadsheet.setValues({
     spreadsheetId: `${SSID}`,
