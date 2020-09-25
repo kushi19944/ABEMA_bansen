@@ -791,7 +791,7 @@ async function CreativeIDGet(IDLIST, WorkData, Row) {
 async function Get_AssetID_function(IDLIST, Datas, Row) {
   // アセット一覧ページに遷移
   await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL);
-  await RPA.sleep(2000);
+  await RPA.sleep(3000);
   // アセットのデータ一覧取得
   const AssetList = await RPA.WebBrowser.findElementsByClassName(
     `Table__line___voLKf`
