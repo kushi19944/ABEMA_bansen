@@ -6,22 +6,20 @@ import {
   Key,
   WebElement,
 } from 'selenium-webdriver';
-import { rootCertificates } from 'tls';
-import { Router } from 'express';
 
 var fs = require('fs');
 
 // 読み込みする スプレッドシートID と シート名 の記載
-const SSID = process.env.BANSEN_SheetID;
-const SSName1 = process.env.BANSEN_SheetName_External;
+const SSID = process.env.BANSEN_SheetID; //
+const SSName1 = process.env.BANSEN_SheetName_External; //
 // 画像などを保存するフォルダのパスを記載する。
 const DownloadFolder = __dirname + '/Download/';
 // Abematvのログイン。 メールアドレス・パスワードの記載 <<漏洩注意>>
 const AbematvID = process.env.AbemaID;
 const AbematvPW = process.env.AbemaPW;
 // AAAMS 本番環境のログイン ID / PW
-const AAAMS_ID = process.env.AAAMS_ID;
-const AAAMS_PW = process.env.AAAMS_PW;
+const AAAMS_ID = process.env.AAAMS_ID; //
+const AAAMS_PW = process.env.AAAMS_PW; //
 // SlackのトークンとチャンネルID
 const SlackToken = process.env.AbemaTV_hubot_Token;
 const SlackChannel = process.env.AbemaTV_Bansen_Channel;
@@ -46,10 +44,10 @@ async function WorkStart() {
   RPA.Logger.info(WorkData[0]);
   // アセット名ごとに 【外部リンク付き番宣】/【買えるAbemaTV】でアカウントを切り替えるようにする
   const AccountFlag = ['null'];
-  if (WorkData[0][0][3].indexOf('【外部リンク付き番宣】') >= 0) {
+  if (WorkData[0][0][3].indexOf('【外部リンク付き') >= 0) {
     AccountFlag[0] = '【外部リンク付き番宣】';
   }
-  if (WorkData[0][0][3].indexOf('【買えるAbemaTV】') >= 0) {
+  if (WorkData[0][0][3].indexOf('【買えるAbemaTV') >= 0) {
     AccountFlag[0] = '【買えるAbemaTV】';
   }
   // ヘッドレスモードでもGoogleDriveから動画ファイルダウンロード
@@ -63,23 +61,28 @@ async function WorkStart() {
   }
   // 一度ログインしたら、次はログインページをスキップさせる
   FirstLoginFlag[0] = 'false';
-  // クリエイティブ作成を押す
-  await CreativeStart(WorkData[0]);
   // ローカルフォルダーから .mp4動画のファイルパスを取得する
   const FilePathData = [''];
   await FilePathGet(FilePathData);
   // AAAMSへファイルアップロード・トランスコード実行テスト
-  await AAAMS_FileUpLoad(FilePathData);
+  await NewAsset_Upload_function(FilePathData);
   // トランスコード完了後に、　アセット入力する
-  await AssetsCreate(IDLIST, WorkData[0], Row);
+  await NewAsset_Create_function(IDLIST, WorkData[0], Row);
+  // アセットIDを取得する
+  await Get_AssetID_function(IDLIST, WorkData[0], Row);
+  if (AccountFlag[0] == '【外部リンク付き番宣】') {
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_1);
+  }
+  if (AccountFlag[0] == '【買えるAbemaTV】') {
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_2);
+  }
   // クリエイティブ作成を行う
   await CreativeCreate(IDLIST, WorkData[0], Row);
   // クリエイティブIDを取得する
   await CreativeIDGet(IDLIST, WorkData[0], Row);
-  // アセットIDを取得する
-  await Get_AssetID_function(IDLIST, WorkData[0], Row);
   // スプシにアセット・クリエイティブIDを貼り付ける
   await Spreadsheet_setValues_function(IDLIST, WorkData[0], Row);
+
   RPA.Logger.info(IDLIST);
   await RPA.sleep(1500);
 }
@@ -148,24 +151,27 @@ async function DeleteFiles() {
 
 async function AAAMS_Login(AccountFlag) {
   await RPA.WebBrowser.get(process.env.AAAMS_Login_URL);
+  //await RPA.WebBrowser.get(`https://stg-admin.vega.fm/#/asset`);
   await RPA.sleep(2000);
   try {
     const AAAMS_loginID_ele = await RPA.WebBrowser.wait(
       RPA.WebBrowser.Until.elementLocated({
-        xpath:
-          '/html/body/div[2]/div/div[2]/form/div/div/div[3]/span/div/div/div/div/div/div/div/div/div[3]/div[1]/div/input',
+        name: 'email',
       }),
       8000
     );
     await RPA.WebBrowser.sendKeys(AAAMS_loginID_ele, [AAAMS_ID]);
-    const AAAMS_loginPW_ele = RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[2]/div/div[2]/form/div/div/div[3]/span/div/div/div/div/div/div/div/div/div[3]/div[2]/div/div/input'
+    const AAAMS_loginPW_ele = await RPA.WebBrowser.wait(
+      RPA.WebBrowser.Until.elementLocated({
+        name: 'password',
+      }),
+      8000
     );
     await RPA.WebBrowser.sendKeys(AAAMS_loginPW_ele, [AAAMS_PW]);
-    const AAAMS_LoginNextButton = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[2]/div/div[2]/form/div/div/button'
+    const AAAMS_LoginNextButton = await RPA.WebBrowser.findElementsByClassName(
+      'auth0-lock-submit'
     );
-    await RPA.WebBrowser.mouseClick(AAAMS_LoginNextButton);
+    await RPA.WebBrowser.mouseClick(AAAMS_LoginNextButton[0]);
     await RPA.sleep(3000);
   } catch {
     RPA.Logger.info('ログイン画面飛ばします');
@@ -206,11 +212,11 @@ async function AAAMS_Login(AccountFlag) {
   }
   if (AccountFlag == '【外部リンク付き番宣】') {
     RPA.Logger.info('外部リンク付き自社広告アカウント直接呼び出しします');
-    await RPA.WebBrowser.get(process.env.AAAMS_Account_1);
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL_1);
   }
   if (AccountFlag == '【買えるAbemaTV】') {
     RPA.Logger.info('買えるAbemaTV社アカウント直接呼び出しします');
-    await RPA.WebBrowser.get(process.env.AAAMS_Account_2);
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL_2);
   }
   await RPA.sleep(3000);
   // 変な更新画面が出るのでスルーする
@@ -237,11 +243,23 @@ async function AAAMS_Login(AccountFlag) {
 async function AAAMS_2nd_Login(AccountFlag) {
   if (AccountFlag == '【外部リンク付き番宣】') {
     RPA.Logger.info('外部リンク付き自社広告アカウント直接呼び出しします');
-    await RPA.WebBrowser.get(process.env.AAAMS_Account_1);
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL_1); //直接外部リンク用のアセットページへ飛ぶ
+    await RPA.sleep(3000);
+    /*
+    await RPA.WebBrowser.get(
+      `https://stg-admin.vega.fm/#/campaign/{%22account%22:{%22ids%22:[%22ac_6%22]},%22accountType%22:%22BANSEN_AD%22}`
+    );
+    */
   }
   if (AccountFlag == '【買えるAbemaTV】') {
     RPA.Logger.info('買えるAbemaTV社アカウント直接呼び出しします');
-    await RPA.WebBrowser.get(process.env.AAAMS_Account_2);
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL_2);
+    await RPA.sleep(3000);
+    /*
+    await RPA.WebBrowser.get(
+      `https://stg-admin.vega.fm/#/campaign/{%22account%22:{%22ids%22:[%22ac_6%22]},%22accountType%22:%22BANSEN_AD%22}`
+    );
+    */
   }
   await RPA.sleep(2300);
 }
@@ -272,40 +290,6 @@ async function DataRowGet(WorkData, Row) {
   RPA.Logger.info(`${Row[0]}　行目のステータスを 作業中 に変更しました`);
 }
 
-async function CreativeStart(AllData) {
-  //左側のクリエイティブを押す
-  const Creative = await RPA.WebBrowser.wait(
-    RPA.WebBrowser.Until.elementLocated({
-      xpath: '/html/body/div[1]/div/div[2]/div[1]/div/div[2]/div[2]/a[6]',
-    }),
-    5000
-  );
-  const CreativeText = await Creative.getText();
-  if (CreativeText == 'クリエイティブ') {
-    await RPA.WebBrowser.mouseClick(Creative);
-    await RPA.sleep(1500);
-  }
-  // 右上の クリエイティブ作成をおす
-  const SakuseiButton = await RPA.WebBrowser.wait(
-    RPA.WebBrowser.Until.elementLocated({
-      xpath: '/html/body/div/div/div[2]/div[3]/div/header/div/div',
-    }),
-    5000
-  );
-  await RPA.WebBrowser.mouseClick(SakuseiButton);
-  await RPA.sleep(3500);
-  // 右側のアセット作成をおす
-  const Assets = await RPA.WebBrowser.wait(
-    RPA.WebBrowser.Until.elementLocated({
-      xpath:
-        '/html/body/div[1]/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div[1]/div[1]/div[2]/div/div/div[1]',
-    }),
-    8000
-  );
-  await RPA.WebBrowser.mouseClick(Assets);
-  await RPA.sleep(1500);
-}
-
 // フォルダーから動画のパスを取得する関数
 async function FilePathGet(FilePathData) {
   const path = require('path');
@@ -322,287 +306,40 @@ async function FilePathGet(FilePathData) {
   RPA.Logger.info(FilePathData);
 }
 
-// input file に直接パスを打ち込んでアップロード・トランスコード実行する
-async function AAAMS_FileUpLoad(FilePathData) {
-  const InputFile1 = await RPA.WebBrowser.wait(
-    RPA.WebBrowser.Until.elementLocated({
-      xpath: '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/div/div/input',
-    }),
-    5000
-  );
-  await RPA.WebBrowser.sendKeys(InputFile1, [
-    `${DownloadFolder}${FilePathData[0]}`,
-  ]);
-  await RPA.sleep(2000);
-  const TransCodeButton = await RPA.WebBrowser.wait(
-    RPA.WebBrowser.Until.elementLocated({
-      xpath:
-        '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/div[2]/div[1]/div[3]',
-    }),
-    5000
-  );
-  // トランスコード実行のボタンをクリックする
-  await RPA.WebBrowser.mouseClick(TransCodeButton);
-  // トランスコード中　の文字があるときは待機する処理
-  const TransCodeFrag = [];
-  TransCodeFrag[0] = false;
-  while (TransCodeFrag[0] == false) {
-    try {
-      const firstele = await RPA.WebBrowser.findElementsByXPath(
-        '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/div[2]/div[1]/div[3]/div/p[1]'
-      );
-      const TransCodeText = await Promise.all(
-        firstele.map(async (elm) => await elm.getText())
-      );
-      if (TransCodeText[0].indexOf('トランスコード中') == 0) {
-        TransCodeFrag[0] = false;
-        await RPA.sleep(5000);
-        RPA.Logger.info('トランスコード中...');
-        continue;
-      }
-      TransCodeFrag[0] = true;
-    } catch {
-      break;
-    }
-  }
-  RPA.Logger.info('トランスコード完了しました');
-  await RPA.sleep(2000);
-}
-
-// アセットを入力する関数
-async function AssetsCreate(IDLIST, Datas, Row) {
-  // アセット名　のテキストが出現するまで待機する
-  while (0 == 0) {
-    const firstAssets = await RPA.WebBrowser.wait(
-      RPA.WebBrowser.Until.elementLocated({
-        xpath:
-          '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[2]/div[1]',
-      }),
-      5000
-    );
-    const AssetsText = await firstAssets.getText();
-    if (AssetsText.indexOf('アセット名') == 0) {
-      RPA.Logger.info('アセット作成に移行します');
-      break;
-    }
-    await RPA.sleep(2000);
-  }
-  // アセット名が65文字以上なら　円滑シートにエラーを記載して、次の行にスキップする
-  if (Datas[0][3].length > 65) {
-    const ErrorText = [['エラー', 'アセット名65文字以上']];
-    await RPA.Google.Spreadsheet.setValues({
-      spreadsheetId: `${SSID}`,
-      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
-      values: ErrorText,
-    });
-    RPA.Logger.info(`${Row[0]} 行目のステータスをエラーに変更しました`);
-    Start();
-  }
-  if (Datas[0][3].length < 64) {
-    RPA.Logger.info('アセット名 65文字以内...OK');
-  }
-  // アセット名を記入する
-  const AssetsNameInput = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[2]/div[2]/div/input'
-  );
-  await AssetsNameInput.clear();
-  await RPA.sleep(50);
-  await RPA.WebBrowser.sendKeys(AssetsNameInput, [Datas[0][3]]);
-  // 期間ありか無期限かを判定して、処理を変える
-  if (String(Datas[0][5]).length == 0) {
-    RPA.Logger.info('無期限にチェックを入れます');
-    const MukigenCheckBox = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[3]/div[2]/div/div[2]'
-    );
-    await RPA.WebBrowser.mouseClick(MukigenCheckBox);
-    await RPA.sleep(1000);
-  }
-  if (String(Datas[0][5]).length > 1) {
-    // 有効期間　のボタンをクリックする
-    const TimeRangeButton = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[3]/div[2]/div/div[1]/div[1]/div'
-    );
-    await RPA.WebBrowser.mouseClick(TimeRangeButton);
-    // 有効期間の開始時間を記入する
-    const TimeRangeStart = await RPA.WebBrowser.wait(
-      RPA.WebBrowser.Until.elementLocated({
-        xpath: '/html/body/div[3]/div[1]/div[1]/input',
-      }),
-      5000
-    );
-    await RPA.WebBrowser.mouseClick(TimeRangeStart);
-    await TimeRangeStart.clear();
-    await RPA.sleep(100);
-    await RPA.WebBrowser.sendKeys(TimeRangeStart, [Datas[0][4]]);
-    await RPA.sleep(300);
-    // 有効期間の終了時間を記入する
-    const TimeRangeEnd = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[3]/div[2]/div[1]/input'
-    );
-    await RPA.WebBrowser.mouseClick(TimeRangeEnd);
-    await TimeRangeEnd.clear();
-    await RPA.sleep(100);
-    await RPA.WebBrowser.sendKeys(TimeRangeEnd, [Datas[0][5]]);
-    await RPA.sleep(300);
-    // 有効期間のOKボタンをおす
-    const OKButton = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[3]/div[3]/div/button[1]'
-    );
-    await RPA.WebBrowser.mouseClick(OKButton);
-    await RPA.sleep(700);
-  }
-  // 尺が記載されているかどうか判定する
-  const Syaku = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[4]/div[2]/div/div/div/div/input'
-  );
-  const SyakuValue = await Syaku.getAttribute('value');
-  RPA.Logger.info('尺の秒数 → ' + SyakuValue);
-  RPA.Logger.info(String(SyakuValue).length);
-  const SyakuText: string = await RPA.WebBrowser.driver.executeScript(
-    `return document.getElementsByName('duration')[2].getAttribute('value')`
-  );
-  RPA.Logger.info(SyakuText);
-  const replace1 = await SyakuText.replace('DURATION_', '');
-  RPA.Logger.info(replace1);
-  const replace2 = await replace1.replace('S', '');
-  RPA.Logger.info(replace2);
-  if (replace2 == Datas[0][1]) {
-    RPA.Logger.info('尺秒数一致しました');
-  }
-  if (replace2 != Datas[0][1]) {
-    RPA.Logger.info('尺秒数一致しません.エラー処理にてスキップします');
-    const ErrorText = [
-      ['エラー', '記載されている尺と実際の尺に相違があります。'],
-    ];
-    await RPA.Google.Spreadsheet.setValues({
-      spreadsheetId: `${SSID}`,
-      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
-      values: ErrorText,
-    });
-    await Start();
-  }
-  if (String(SyakuValue).length < 1) {
-    RPA.Logger.info('尺が記載されていません');
-    // 尺が自動で記載されていなければロボットが記入する
-    //const SyakuInput = await RPA.WebBrowser.findElementByClassName('duration');
-    const SyakuInput = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[4]/div[2]/div/div/div/div/input'
-    );
-    await RPA.WebBrowser.mouseClick(SyakuInput);
-    await RPA.sleep(100);
-    await RPA.WebBrowser.sendKeys(SyakuInput, [Datas[0][1]]);
-    await RPA.WebBrowser.sendKeys(SyakuInput, [Key.ENTER]);
-    await RPA.sleep(200);
-  }
-  // アセット名が同じならエラー表示させて、スキップする
-  try {
-    await RPA.sleep(300);
-    const AsseteNameDouble = await RPA.WebBrowser.wait(
-      RPA.WebBrowser.Until.elementLocated({
-        xpath:
-          '/html/body/div[1]/div/div[6]/div[2]/div[1]/div/form/div/div[2]/div[1]/span[2]',
-      }),
-      1000
-    );
-    const AssetNameDoubleText = await AsseteNameDouble.getText();
-    if (String(AssetNameDoubleText) == '同じアセット名が既に存在しています') {
-      RPA.Logger.info(AssetNameDoubleText + ' 作業スキップします');
-      const ErrorText = [['エラー', '同じアセット名が存在しています']];
-      await RPA.Google.Spreadsheet.setValues({
-        spreadsheetId: `${SSID}`,
-        range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
-        values: ErrorText,
-      });
-      Start();
-    }
-  } catch {
-    RPA.Logger.info('アセット名が唯一なので次の処理に進みます');
-  }
-  // 登録ボタンを押す
-  const ApplyButton = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div[1]/div/div[6]/div[2]/footer/div[2]'
-  );
-  await RPA.WebBrowser.mouseClick(ApplyButton);
-  await RPA.sleep(5000);
-  while (0 == 0) {
-    // プレビュー画面が出るまで待機
-    const preview = await RPA.WebBrowser.wait(
-      RPA.WebBrowser.Until.elementLocated({
-        xpath: '/html/body/div/div/div[6]/div[2]/header/div',
-      }),
-      5000
-    );
-    const previewtext = await preview.getText();
-    RPA.Logger.info(previewtext);
-    RPA.sleep(4000);
-    if (String(previewtext).length > 2) {
-      break;
-    }
-    RPA.Logger.info('プレビュー画面が取得できません');
-  }
-  await RPA.sleep(1000);
-  /*
-  // アセット名が一致しているか判定
-  while (0 == 0) {
-    await RPA.sleep(4000);
-    try {
-      const firstAssetsName = await RPA.WebBrowser.wait(
-        RPA.WebBrowser.Until.elementLocated({
-          xpath:
-            '//*[@id="reactroot"]/div/div[6]/div[2]/div[1]/table/tbody/tr/td[2]',
-        }),
-        5000
-      );
-      const PageAssetsName = await firstAssetsName.getText();
-      RPA.Logger.info(
-        '作成したアセット名　　　　　　　　　→　' + PageAssetsName
-      );
-      RPA.Logger.info('現在保持しているデータのアセット名　→　' + Datas[0][3]);
-      if (PageAssetsName == Datas[0][3]) {
-        RPA.Logger.info('アセット名一致しました。　アセットID取得します');
-        break;
-      }
-    } catch (ErrorMes) {
-      RPA.Logger.info('アセット名が取得できませんでした');
-      RPA.Logger.info('エラー原因:', ErrorMes);
-    }
-  }
-  while (0 == 0) {
-    const AssetsID = await RPA.WebBrowser.findElementByXPath(
-      '/html/body/div/div/div[6]/div[2]/div[1]/table/tbody/tr/td[1]'
-    );
-    IDLIST[0][0] = await AssetsID.getText();
-    RPA.Logger.info(IDLIST);
-    await RPA.sleep(1000);
-    if (IDLIST[0][0].length > 2) {
-      break;
-    }
-  }
-  */
-  // アセットID　を取得した後、右上のクローズボタンをおす
-  const CloseButton = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div/div/div[6]/div[2]/div[3]'
-  );
-  await RPA.WebBrowser.mouseClick(CloseButton);
-  await RPA.sleep(1000);
-}
-
 // クリエイティブを入力する関数
 async function CreativeCreate(IDLIST, Datas, Row) {
+  await RPA.sleep(2000);
+  const CreativeCreateButton = await RPA.WebBrowser.wait(
+    RPA.WebBrowser.Until.elementLocated({
+      className: 'Button__button___2uDT- Button__create___1F14z',
+    }),
+    5000
+  );
+  await CreativeCreateButton.click();
+  await RPA.sleep(1000);
+  // アセットを紐付ける
+  await RPA.WebBrowser.wait(
+    RPA.WebBrowser.Until.elementLocated({
+      name: 'creativeAsset',
+    }),
+    5000
+  );
+  // アセット名で検索
+  const AssetSearchInput: WebElement = await RPA.WebBrowser.driver.executeScript(
+    `return document.getElementsByName("creativeAsset")[0].children[0].children[1].children[1].children[0]`
+  );
+  await RPA.WebBrowser.sendKeys(AssetSearchInput, [`${Datas[0][3]}`]);
+  await RPA.sleep(4000);
+  const SentakuButton = await RPA.WebBrowser.findElementByXPath(
+    `//*[@id="reactroot"]/div/div[5]/div[2]/div[1]/div/form/div/div[2]/div[2]/table/tbody/tr/td[1]/div`
+  );
+  await SentakuButton.click();
+  await RPA.sleep(500);
   // クリエイティブ名を入力する
-  try {
-    const CreativeName = await RPA.WebBrowser.wait(
-      RPA.WebBrowser.Until.elementLocated({
-        xpath:
-          '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[3]/div[2]/div/input',
-      }),
-      5000
-    );
-    await RPA.WebBrowser.sendKeys(CreativeName, [Datas[0][3]]);
-    await RPA.sleep(50);
-  } catch {
-    RPA.Logger.info('クリエイティブ名を入力する要素が取得できませんでした');
-  }
+  const CreativeName: WebElement = await RPA.WebBrowser.driver.executeScript(
+    `return document.getElementsByName("name")[1].children[1].children[0].children[0]`
+  );
+  await RPA.WebBrowser.sendKeys(CreativeName, [`${Datas[0][3]}`]);
   await RPA.sleep(300);
   // 訴求を入力する
   const SokyuuInput2 = await RPA.WebBrowser.findElementsByXPath(
@@ -697,17 +434,6 @@ async function ZokuseiInput_function(Data, OKbutton) {
   const CreativeOKButto = await RPA.WebBrowser.findElementByXPath(
     '/html/body/div/div/div[5]/div[2]/footer/div[2]'
   );
-  const ZokuseiList = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div[1]/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[1]/div/div/div'
-  );
-  const ZokuseiList2 = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div[1]/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[1]/div/div/div/div/span[1]/div[1]'
-  );
-  /*
-  const ZokuseiInput = await RPA.WebBrowser.findElementByXPath(
-    '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[1]/div/div/div/div/span[1]/div[2]/input'
-  );
-  */
   const ZokuseiInput: WebElement = await RPA.WebBrowser.driver.executeScript(
     `return document.getElementsByClassName('Select-input')[8].children[0]`
   );
@@ -715,13 +441,7 @@ async function ZokuseiInput_function(Data, OKbutton) {
     '/html/body/div/div/div[5]/div[2]/div[1]/div/form/div/div[6]/div[2]/div[2]/div/div[1]'
   );
   await RPA.sleep(100);
-  /*
-  try {
-    await RPA.WebBrowser.mouseClick(ZokuseiList);
-  } catch {
-    await RPA.WebBrowser.mouseClick(ZokuseiList2);
-  }
-  */
+
   await RPA.WebBrowser.sendKeys(ZokuseiInput, [Data]);
   await RPA.sleep(300);
   try {
@@ -765,6 +485,9 @@ async function ZokuseiInput_function(Data, OKbutton) {
 
 // クリエイティブIDを取得して　ID円滑シートに貼り付ける関数
 async function CreativeIDGet(IDLIST, WorkData, Row) {
+  await RPA.sleep(2000);
+  await RPA.WebBrowser.refresh();
+  await RPA.sleep(1000);
   const firstdata = await RPA.WebBrowser.findElementsByClassName(
     'Table__line___voLKf'
   );
@@ -787,25 +510,226 @@ async function CreativeIDGet(IDLIST, WorkData, Row) {
   }
 }
 
+// 新しい手法でアセットトランスコードする関数
+async function NewAsset_Upload_function(FilePathData) {
+  await RPA.sleep(1000);
+  const AssetCreateButton = await RPA.WebBrowser.wait(
+    RPA.WebBrowser.Until.elementLocated({
+      className: 'Button__button___2uDT- Button__create___1F14z',
+    }),
+    5000
+  );
+  const ButtonText = await AssetCreateButton.getText();
+  RPA.Logger.info(ButtonText);
+  await RPA.WebBrowser.mouseClick(AssetCreateButton);
+  await RPA.sleep(1000);
+  const UploaderInput = await RPA.WebBrowser.wait(
+    RPA.WebBrowser.Until.elementLocated({
+      className: 'Uploader__file___1mcH4',
+    }),
+    5000
+  );
+  await RPA.WebBrowser.sendKeys(UploaderInput, [
+    `${DownloadFolder}${FilePathData[0]}`,
+  ]);
+  await RPA.sleep(1000);
+  const TransCodeStartButton = await RPA.WebBrowser.findElementByXPath(
+    `//*[@id="reactroot"]/div/div[5]/div[2]/div[1]/div/div[2]/div[1]/div[3]`
+  );
+  await RPA.WebBrowser.mouseClick(TransCodeStartButton);
+  await RPA.sleep(1000);
+  try {
+    for (let i = 0; i < 300; i++) {
+      const TransCode = await RPA.WebBrowser.findElementByXPath(
+        `//*[@id="reactroot"]/div/div[5]/div[2]/div[1]/div/div[2]/div[1]/div[3]/div/p[1]`
+      ); //トランスコード中...の文字
+      const TransCodeText = await TransCode.getText();
+      RPA.Logger.info(TransCodeText);
+      await RPA.sleep(3000);
+      if (TransCodeText != 'トランスコード中...') {
+        RPA.Logger.info('トランスコード完了');
+        break; //トランスコード完了
+      }
+    }
+  } catch {
+    RPA.Logger.info('トランスコード完了');
+  }
+}
+
+// 新しい手法でアセット作成を行う関数
+async function NewAsset_Create_function(IDLIST, Datas, Row) {
+  await RPA.sleep(2000);
+  const AssetNameInput: WebElement = await RPA.WebBrowser.driver.executeScript(
+    `return document.getElementsByName("name")[1].children[1].children[0].children[0]`
+  );
+  // アセット名が65文字以上なら　円滑シートにエラーを記載して、次の行にスキップする
+  if (Datas[0][3].length > 65) {
+    const ErrorText = [['エラー', 'アセット名65文字以上']];
+    await RPA.Google.Spreadsheet.setValues({
+      spreadsheetId: `${SSID}`,
+      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
+      values: ErrorText,
+    });
+    RPA.Logger.info(`${Row[0]} 行目のステータスをエラーに変更しました`);
+    await Start();
+  }
+  if (Datas[0][3].length < 64) {
+    RPA.Logger.info('アセット名 65文字以内...OK');
+    await AssetNameInput.clear();
+    await RPA.sleep(100);
+    await RPA.WebBrowser.sendKeys(AssetNameInput, [`${Datas[0][3]}`]);
+  }
+
+  // 期間ありか無期限かを判定して、処理を変える
+  if (String(Datas[0][5]).length == 0) {
+    RPA.Logger.info('無期限にチェックを入れます');
+    await RPA.WebBrowser.driver.executeScript(
+      `document.getElementsByClassName("Checkboxes__item___2sroS")[0].children[0].click()`
+    );
+    await RPA.sleep(1000);
+  }
+  if (String(Datas[0][5]).length > 1) {
+    // 有効期間　のボタンをクリックする
+    await RPA.WebBrowser.driver.executeScript(
+      `document.getElementsByName("dateRange")[0].children[1].children[0].children[0].children[0].children[0].click()`
+    );
+    // 有効期間の開始時間を記入する
+    const TimeRange_start = await RPA.WebBrowser.wait(
+      RPA.WebBrowser.Until.elementLocated({
+        name: 'daterangepicker_start',
+      }),
+      5000
+    );
+    await RPA.WebBrowser.mouseClick(TimeRange_start);
+    await TimeRange_start.clear();
+    await RPA.sleep(100);
+    await RPA.WebBrowser.sendKeys(TimeRange_start, [Datas[0][4]]);
+    await RPA.sleep(300);
+    // 有効期間の終了時間を記入する
+    const TimeRange_end = await RPA.WebBrowser.wait(
+      RPA.WebBrowser.Until.elementLocated({
+        name: 'daterangepicker_end',
+      }),
+      5000
+    );
+    await RPA.WebBrowser.mouseClick(TimeRange_end);
+    await TimeRange_end.clear();
+    await RPA.sleep(100);
+    await RPA.WebBrowser.sendKeys(TimeRange_end, [Datas[0][5]]);
+    await RPA.sleep(300);
+    // 有効期間のOKボタンをおす
+    const OKButton: WebElement = await RPA.WebBrowser.driver.executeScript(
+      `return document.getElementsByClassName("applyBtn btn btn-sm btn-success")[0]`
+    );
+    await OKButton.click();
+    await RPA.sleep(700);
+  }
+  // 尺が記載されているかどうか判定する
+  let SyakuText: string = await RPA.WebBrowser.driver.executeScript(
+    `return document.getElementsByName("duration")[1].value`
+  );
+  RPA.Logger.info(SyakuText);
+  const replace1 = await SyakuText.replace('DURATION_', '').replace('S', '');
+  RPA.Logger.info(replace1);
+  if (replace1 == Datas[0][1]) {
+    RPA.Logger.info('尺秒数一致しました');
+  }
+  if (replace1 != Datas[0][1]) {
+    RPA.Logger.info('尺秒数一致しません.エラー処理にてスキップします');
+    const ErrorText = [
+      ['エラー', '記載されている尺と実際の尺に相違があります。'],
+    ];
+    await RPA.Google.Spreadsheet.setValues({
+      spreadsheetId: `${SSID}`,
+      range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
+      values: ErrorText,
+    });
+    await Start();
+  }
+  if (String(SyakuText).length < 1) {
+    RPA.Logger.info('尺が記載されていません');
+    // 尺が自動で記載されていなければロボットが記入する
+    const SyakuInput: WebElement = await RPA.WebBrowser.driver.executeScript(
+      `return document.getElementsByName("duration")[1]`
+    );
+    await RPA.WebBrowser.mouseClick(SyakuInput);
+    await RPA.sleep(100);
+    await RPA.WebBrowser.sendKeys(SyakuInput, [Datas[0][1]]);
+    await RPA.WebBrowser.sendKeys(SyakuInput, [Key.ENTER]);
+    await RPA.sleep(200);
+  }
+  // アセット名が同じならエラー表示させて、スキップする
+  try {
+    await RPA.sleep(300);
+    const AsseteNameDouble = await RPA.WebBrowser.wait(
+      RPA.WebBrowser.Until.elementLocated({
+        className: 'Field__error___2jFF6',
+      }),
+      1000
+    );
+    const AssetNameDoubleText = await AsseteNameDouble.getText();
+    if (String(AssetNameDoubleText) == '同じアセット名が既に存在しています') {
+      RPA.Logger.info(AssetNameDoubleText + ' 作業スキップします');
+      const ErrorText = [['エラー', '同じアセット名が存在しています']];
+      await RPA.Google.Spreadsheet.setValues({
+        spreadsheetId: `${SSID}`,
+        range: `${SSName1}!K${Row[0]}:L${Row[0]}`,
+        values: ErrorText,
+      });
+      await Start();
+    }
+  } catch {
+    RPA.Logger.info('アセット名が唯一なので次の処理に進みます');
+  }
+
+  const OKButton = await RPA.WebBrowser.findElementsByClassName(
+    `Button__button___2uDT- Button__ok___1qMMy Modal__buttonOkay___2ewPw`
+  );
+  await RPA.WebBrowser.mouseClick(OKButton[0]); // 登録のボタンをおす
+  await RPA.sleep(10000);
+}
+
 // アセットIDを取得する関数
 async function Get_AssetID_function(IDLIST, Datas, Row) {
-  // アセット一覧ページに遷移
-  await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL);
-  await RPA.sleep(3000);
-  // アセットのデータ一覧取得
-  const AssetList = await RPA.WebBrowser.findElementsByClassName(
-    `Table__line___voLKf`
-  );
-  for (let i in AssetList) {
-    const AssetText = await AssetList[i].getText();
-    const AssetData = AssetText.split('\n'); // 改行で切り分ける
-    RPA.Logger.info(AssetData);
-    if (AssetData[2] == Datas[0][3]) {
-      RPA.Logger.info('アセット名一致しました.アセットID取得します');
-      RPA.Logger.info('アセットID:', AssetData[0]);
-      IDLIST[0][0] = AssetData[0];
-      break;
+  try {
+    // アセット一覧ページに遷移
+    await RPA.WebBrowser.get(process.env.AAAMS_Account_AssetURL_ALL);
+    await RPA.sleep(2000);
+    await RPA.WebBrowser.refresh();
+    await RPA.sleep(2000);
+    // アセットのデータ一覧取得
+    const AssetList = await RPA.WebBrowser.wait(
+      RPA.WebBrowser.Until.elementsLocated({
+        className: 'Table__line___voLKf',
+      }),
+      7000
+    );
+    for (let i in AssetList) {
+      let AssetText: any = await RPA.WebBrowser.findElementByXPath(
+        `//*[@id="reactroot"]/div/div[2]/div[3]/div/table/tbody/tr[${
+          Number(i) + 1
+        }]/td[3]`
+      );
+      let AssetID: any = await RPA.WebBrowser.findElementByXPath(
+        `//*[@id="reactroot"]/div/div[2]/div[3]/div/table/tbody/tr[${
+          Number(i) + 1
+        }]/td[1]`
+      );
+      AssetText = await AssetText.getText();
+      AssetID = await AssetID.getText();
+      RPA.Logger.info(AssetID, AssetText);
+      if (AssetText == Datas[0][3]) {
+        RPA.Logger.info('アセット名一致しました.アセットID取得します');
+        RPA.Logger.info('アセットID:', AssetID);
+        IDLIST[0][0] = AssetID;
+        break;
+      }
     }
+  } catch {
+    await RPA.WebBrowser.takeScreenshot();
+    RPA.Logger.info('エラー出現しました.RPA終了させます');
+    await RPA.sleep(2000);
+    await process.exit();
   }
 }
 
